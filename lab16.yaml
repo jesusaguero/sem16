@@ -1,48 +1,120 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Plantilla para lanzar una instancia EC2 y habilitar SSH
+Description: Plantilla para lanzar una instancia EC2 y habilitar SSH, junto con una VPC y subredes generadas autom?ticamente
 Parameters:
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Description: VpcId of your existing Virtual Private Cloud (VPC)
-    ConstraintDescription: must be the VPC Id of an existing Virtual Private Cloud.
-  Subnets:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: The list of SubnetIds in your Virtual Private Cloud (VPC)
-    ConstraintDescription: must be a list of at least two existing subnets associated with at least two different availability zones. They should be residing in the selected Virtual Private Cloud.
   KeyName:
     Description: Nombre del SSH KeyPair
     Type: AWS::EC2::KeyPair::KeyName
     ConstraintDescription: Provide the name of an existing SSH key pair
 Resources:
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: MyVPC
+  MySubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: MySubnet1
+  MySubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: MySubnet2
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: MyInternetGateway
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref InternetGateway
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  SubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref MySubnet1
+      RouteTableId: !Ref PublicRouteTable
+  SubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref MySubnet2
+      RouteTableId: !Ref PublicRouteTable
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref MyVPC
+      GroupDescription: Habilitar acceso SSH via puerto 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Lab16
   MyEC2Instance:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t2.micro
       ImageId: ami-09040d770ffe2224f
       KeyName: !Ref KeyName
-      SecurityGroups:
-        - !Ref InstanceSecurityGroup
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: !Ref MySubnet1
+          GroupSet:
+            - !Ref InstanceSecurityGroup
       Tags:
         - Key: Name
           Value: Lab16
-  InstanceSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: SEMANA16
-      GroupDescription: Habilitar acceso SSH  via puerto 22
-      SecurityGroupIngress:
-        IpProtocol: tcp
-        FromPort: 22
-        ToPort: 22
-        CidrIp: 0.0.0.0/0
   MyS3Bucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: buckets16
+      BucketName: bucketsemv16
 Outputs:
   InstanceID:
     Description: Instance ID
     Value: !Ref MyEC2Instance
+  VpcId:
+    Description: VPC ID
+    Value: !Ref MyVPC
+  Subnet1:
+    Description: Subnet ID 1
+    Value: !Ref MySubnet1
+  Subnet2:
+    Description: Subnet ID 2
+    Value: !Ref MySubnet2
   S3BucketName:
     Description: Nombre del bucket S3 creado
     Value: !Ref MyS3Bucket
