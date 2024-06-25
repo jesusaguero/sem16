@@ -1,10 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Plantilla para lanzar una instancia EC2 y habilitar SSH, junto con una VPC y subredes generadas autom?ticamente
+Description: Template para crear una VPC, subnets, instancia EC2 y un bucket S3.
 Parameters:
   KeyName:
     Description: Nombre del SSH KeyPair
     Type: AWS::EC2::KeyPair::KeyName
     ConstraintDescription: Provide the name of an existing SSH key pair
+
 Resources:
   MyVPC:
     Type: AWS::EC2::VPC
@@ -15,6 +16,7 @@ Resources:
       Tags:
         - Key: Name
           Value: MyVPC
+
   MySubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -25,6 +27,7 @@ Resources:
       Tags:
         - Key: Name
           Value: MySubnet1
+
   MySubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -35,17 +38,20 @@ Resources:
       Tags:
         - Key: Name
           Value: MySubnet2
+
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
           Value: MyInternetGateway
+
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref MyVPC
       InternetGatewayId: !Ref InternetGateway
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -53,6 +59,7 @@ Resources:
       Tags:
         - Key: Name
           Value: PublicRouteTable
+
   PublicRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
@@ -60,16 +67,19 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
+
   SubnetRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref MySubnet1
       RouteTableId: !Ref PublicRouteTable
+
   SubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref MySubnet2
       RouteTableId: !Ref PublicRouteTable
+
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -83,11 +93,12 @@ Resources:
       Tags:
         - Key: Name
           Value: Lab16
+
   MyEC2Instance:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t2.micro
-      ImageId: ami-09040d770ffe2224f
+      ImageId: ami-04b70fa74e45c3917
       KeyName: !Ref KeyName
       NetworkInterfaces:
         - AssociatePublicIpAddress: true
@@ -98,10 +109,37 @@ Resources:
       Tags:
         - Key: Name
           Value: Lab16
+
   MyS3Bucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: bucketsemv16
+      BucketName: !Sub 'bucketsemv16-${AWS::AccountId}-${AWS::Region}'
+
+  Lab16Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub arn:aws:s3:::bucketsemv16-${AWS::AccountId}-${AWS::Region}
+                  - !Sub arn:aws:s3:::bucketsemv16-${AWS::AccountId}-${AWS::Region}/*
+
 Outputs:
   InstanceID:
     Description: Instance ID
